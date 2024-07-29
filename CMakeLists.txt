@@ -11,16 +11,39 @@ find_package(ament_cmake REQUIRED)
 # further dependencies manually.
 # find_package(<dependency> REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2 REQUIRED)
+
+# Include directories
+include_directories(include)
 
 add_executable(imu_dvl_publisher src/imu_dvl_publisher.cpp)
+add_executable(data_subscriber src/data_subscriber.cpp)
 
-ament_target_dependencies(imu_dvl_publisher rclcpp sensor_msgs nav_msgs tf2_ros)
+ament_target_dependencies(imu_dvl_publisher 
+  rclcpp
+  sensor_msgs
+  nav_msgs
+  geometry_msgs
+  tf2_ros
+  tf2
+)
+
+ament_target_dependencies(data_subscriber
+  rclcpp
+  sensor_msgs
+  nav_msgs
+  geometry_msgs
+  tf2_ros
+  tf2
+)
 
 install(TARGETS
   imu_dvl_publisher
+  data_subscriber
   DESTINATION lib/${PROJECT_NAME})
 
 install(DIRECTORY launch/
