@@ -4,7 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <sensor_msgs/msg/imu.hpp>
 #include <nav_msgs/msg/odometry.hpp>
-#include <geometry_msgs/msg/pose_stamped.hpp> 
+#include <geometry_msgs/msg/pose_stamped.hpp>
 #include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <ctime>
@@ -19,85 +19,122 @@ public:
     ImuDvlPublisher(const std::string &csv_file)
         : Node("imu_dvl_publisher"), csv_file_(csv_file)
     {
-        imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("imu/data", 10);
-        dvl_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("dvl/data", 10);
+        imu_pub_ = this->create_publisher<sensor_msgs::msg::Imu>("imu/data", 50);
+        dvl_pub_ = this->create_publisher<nav_msgs::msg::Odometry>("dvl/data", 50);
         ground_truth_pub_ = this->create_publisher<geometry_msgs::msg::PoseStamped>("ground_truth", 10);
-        timer_ = this->create_wall_timer(100ms, std::bind(&ImuDvlPublisher::publishData, this));
-        readCsvFile();
+        timer_ = this->create_wall_timer(500ms, std::bind(&ImuDvlPublisher::publishData, this));
+
+        file_.open(csv_file_);
+        if (!file_.is_open())
+        {
+            RCLCPP_ERROR(this->get_logger(), "Could not open CSV file.");
+            std::cout << csv_file_;
+            return;
+        }
+
+        // Skip the first few lines if they are headers
+        for (int i = 0; i < 1; ++i)
+        {
+            std::string line;
+            std::getline(file_, line); // Adjust the number of lines to skip according to your CSV format
+        }
     }
 
 private:
-    void readCsvFile()
+    void publishData()
     {
-        std::ifstream file(csv_file_);
-        if (!file.is_open())
+        if (!file_.is_open())
         {
-            RCLCPP_ERROR(this->get_logger(), "Could not open CSV file.");
-            std::cout<<csv_file_;
             return;
         }
 
         std::string line;
-        // Skip the first few lines if they are headers
-        for (int i = 0; i < 1; ++i)
-        {
-            std::getline(file, line); // Adjust the number of lines to skip according to your CSV format
-        }
-        while (std::getline(file, line))
+        if (std::getline(file_, line))
         {
             std::stringstream ss(line);
             std::string token;
-
-            try {
+            try
+            {
                 // Segment 1: IMU data
-                std::getline(ss, token, '\t'); std::string t_imu_str = token;
-                std::getline(ss, token, '\t'); double AccX = std::stod(token);
-                std::getline(ss, token, '\t'); double AccY = std::stod(token);
-                std::getline(ss, token, '\t'); double AccZ = std::stod(token);
-                std::getline(ss, token, '\t'); double GyrX = std::stod(token);
-                std::getline(ss, token, '\t'); double GyrY = std::stod(token);
-                std::getline(ss, token, '\t'); double GyrZ = std::stod(token);
-                std::getline(ss, token, '\t'); double MagX = std::stod(token);
-                std::getline(ss, token, '\t'); double MagY = std::stod(token);
-                std::getline(ss, token, '\t'); double MagZ = std::stod(token);
-                std::getline(ss, token, '\t'); double pressure = std::stod(token);
-                std::getline(ss, token, '\t'); double temperature = std::stod(token);
-                std::getline(ss, token, '\t'); // Skip whitespace
+                std::getline(ss, token, ','); std::string t_imu_str = token;
+                std::getline(ss, token, ','); double AccX = std::stod(token);
+                std::getline(ss, token, ','); double AccY = std::stod(token);
+                std::getline(ss, token, ','); double AccZ = std::stod(token);
+                std::getline(ss, token, ','); double GyrX = std::stod(token);
+                std::getline(ss, token, ','); double GyrY = std::stod(token);
+                std::getline(ss, token, ','); double GyrZ = std::stod(token);
+                std::getline(ss, token, ','); double MagX = std::stod(token);
+                std::getline(ss, token, ','); double MagY = std::stod(token);
+                std::getline(ss, token, ','); double MagZ = std::stod(token);
+                std::getline(ss, token, ','); double pressure = std::stod(token);
+                std::getline(ss, token, ','); double temperature = std::stod(token);
+                std::getline(ss, token, ','); // Skip whitespace
 
-                imu_data_.emplace_back(t_imu_str, AccX, AccY, AccZ, GyrX, GyrY, GyrZ, MagX, MagY, MagZ, pressure, temperature);
+                auto imu_msg = sensor_msgs::msg::Imu();
+                imu_msg.header.stamp = parseTimestamp(t_imu_str);
+                imu_msg.header.frame_id = "imu_link";
+                imu_msg.linear_acceleration.x = AccX;
+                imu_msg.linear_acceleration.y = AccY;
+                imu_msg.linear_acceleration.z = AccZ;
+                imu_msg.angular_velocity.x = GyrX;
+                imu_msg.angular_velocity.y = GyrY;
+                imu_msg.angular_velocity.z = GyrZ;
+
+                imu_pub_->publish(imu_msg);
 
                 // Segment 2: DVL data
-                std::getline(ss, token, '\t'); std::string t_DVL_str = token;
-                std::getline(ss, token, '\t'); double WX = std::stod(token);
-                std::getline(ss, token, '\t'); double WY = std::stod(token);
-                std::getline(ss, token, '\t'); double WZ = std::stod(token);
-                std::getline(ss, token, '\t'); double BX = std::stod(token);
-                std::getline(ss, token, '\t'); double BY = std::stod(token);
-                std::getline(ss, token, '\t'); double BZ = std::stod(token);
-                std::getline(ss, token, '\t'); // Skip whitespace
+                std::getline(ss, token, ','); std::string t_DVL_str = token;
+                std::getline(ss, token, ','); double WX = std::stod(token);
+                std::getline(ss, token, ','); double WY = std::stod(token);
+                std::getline(ss, token, ','); double WZ = std::stod(token);
+                std::getline(ss, token, ','); double BX = std::stod(token);
+                std::getline(ss, token, ','); double BY = std::stod(token);
+                std::getline(ss, token, ','); double BZ = std::stod(token);
+                std::getline(ss, token, ','); // Skip whitespace
 
-                dvl_data_.emplace_back(t_DVL_str, WX, WY, WZ, BX, BY, BZ);
+                auto dvl_msg = nav_msgs::msg::Odometry();
+                dvl_msg.header.stamp = parseTimestamp(t_DVL_str);
+                dvl_msg.header.frame_id = "dvl_link";
+                dvl_msg.pose.pose.position.x = BX;
+                dvl_msg.pose.pose.position.y = BY;
+                dvl_msg.pose.pose.position.z = BZ;
+                dvl_msg.twist.twist.linear.x = WX;
+                dvl_msg.twist.twist.linear.y = WY;
+                dvl_msg.twist.twist.linear.z = WZ;
+
+                dvl_pub_->publish(dvl_msg);
 
                 // Segment 3: Filter data
-                std::getline(ss, token, '\t'); std::string t_filter_str = token;
-                std::getline(ss, token, '\t'); double PN = std::stod(token);
-                std::getline(ss, token, '\t'); double PE = std::stod(token);
-                std::getline(ss, token, '\t'); double PD = std::stod(token);
+                std::getline(ss, token, ','); std::string t_filter_str = token;
+                std::getline(ss, token, ','); double PN = std::stod(token);
+                std::getline(ss, token, ','); double PE = std::stod(token);
+                std::getline(ss, token, ','); double PD = std::stod(token);
 
-                filter_data_.emplace_back(t_filter_str, PN, PE, PD);
-            }    
+                auto ground_truth_msg = geometry_msgs::msg::PoseStamped();
+                ground_truth_msg.header.stamp = parseTimestamp(t_filter_str);
+                ground_truth_msg.header.frame_id = "ground_truth_link";
+                ground_truth_msg.pose.position.x = PN;
+                ground_truth_msg.pose.position.y = PE;
+                ground_truth_msg.pose.position.z = PD;
+
+                ground_truth_pub_->publish(ground_truth_msg);
+            }
             catch (const std::invalid_argument &e)
             {
                 RCLCPP_ERROR(this->get_logger(), "Invalid data format: %s", e.what());
                 RCLCPP_ERROR(this->get_logger(), "Line: %s", line.c_str());
-                continue; // Skip this line and proceed to the next one
-            } 
+            }
             catch (const std::out_of_range &e)
             {
                 RCLCPP_ERROR(this->get_logger(), "Data out of range: %s", e.what());
                 RCLCPP_ERROR(this->get_logger(), "Line: %s", line.c_str());
-                continue; // Skip this line and proceed to the next one
             }
+        }
+        else
+        {
+            RCLCPP_INFO(this->get_logger(), "End of CSV file reached.");
+            timer_->cancel();
+            file_.close();
         }
     }
 
@@ -117,68 +154,19 @@ private:
         return rclcpp::Time(std::mktime(&tm)) + rclcpp::Duration(std::chrono::nanoseconds(nanoseconds));
     }
 
-    void publishData()
-    {
-        if (current_index_ >= imu_data_.size() || current_index_ >= dvl_data_.size() || current_index_ >= filter_data_.size())
-        {
-            return;
-        }
-
-        auto imu_msg = sensor_msgs::msg::Imu();
-        imu_msg.header.stamp = parseTimestamp(std::get<0>(imu_data_[current_index_]));
-        imu_msg.header.frame_id = "imu_link";
-        imu_msg.linear_acceleration.x = std::get<1>(imu_data_[current_index_]);
-        imu_msg.linear_acceleration.y = std::get<2>(imu_data_[current_index_]);
-        imu_msg.linear_acceleration.z = std::get<3>(imu_data_[current_index_]);
-        imu_msg.angular_velocity.x = std::get<4>(imu_data_[current_index_]);
-        imu_msg.angular_velocity.y = std::get<5>(imu_data_[current_index_]);
-        imu_msg.angular_velocity.z = std::get<6>(imu_data_[current_index_]);
-        // imu_msg.orientation_covariance[0] = -1; // Orientation not provided
-
-        imu_pub_->publish(imu_msg);
-
-        auto dvl_msg = nav_msgs::msg::Odometry();
-        dvl_msg.header.stamp = parseTimestamp(std::get<0>(dvl_data_[current_index_]));
-        dvl_msg.header.frame_id = "dvl_link";
-        dvl_msg.pose.pose.position.x = std::get<1>(dvl_data_[current_index_]);
-        dvl_msg.pose.pose.position.y = std::get<2>(dvl_data_[current_index_]);
-        dvl_msg.pose.pose.position.z = std::get<3>(dvl_data_[current_index_]);
-        dvl_msg.twist.twist.linear.x = std::get<4>(dvl_data_[current_index_]);
-        dvl_msg.twist.twist.linear.y = std::get<5>(dvl_data_[current_index_]);
-        dvl_msg.twist.twist.linear.z = std::get<6>(dvl_data_[current_index_]);
-
-        dvl_pub_->publish(dvl_msg);
-
-        // Publish Ground Truth data
-        auto ground_truth_msg = geometry_msgs::msg::PoseStamped();
-        ground_truth_msg.header.stamp = parseTimestamp(std::get<0>(filter_data_[current_index_]));
-        ground_truth_msg.header.frame_id = "ground_truth_link";
-        ground_truth_msg.pose.position.x = std::get<1>(filter_data_[current_index_]);
-        ground_truth_msg.pose.position.y = std::get<2>(filter_data_[current_index_]);
-        ground_truth_msg.pose.position.z = std::get<3>(filter_data_[current_index_]);
-
-        ground_truth_pub_->publish(ground_truth_msg);
-
-        current_index_++;
-    }
-
     std::string csv_file_;
+    std::ifstream file_;
     rclcpp::Publisher<sensor_msgs::msg::Imu>::SharedPtr imu_pub_;
     rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr ground_truth_pub_; // Ground truth publisher
     rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr dvl_pub_;
     rclcpp::TimerBase::SharedPtr timer_;
-
-    std::vector<std::tuple<std::string, double, double, double, double, double, double, double, double, double, double, double>> imu_data_;
-    std::vector<std::tuple<std::string, double, double, double, double, double, double>> dvl_data_;
-    std::vector<std::tuple<std::string, double, double, double>> filter_data_;
-    size_t current_index_ = 0;
 };
 
 int main(int argc, char **argv)
 {
     rclcpp::init(argc, argv);
     std::string home_dir = std::getenv("HOME");
-    std::string relative_path = "/colcon_ws/src/kalman_filters/data/AUV-Alice/AliceData1.csv";
+    std::string relative_path = "/colcon_ws/src/kalman_filters/data/AUV-Alice/AliceData2.csv";
     std::string csv_file_path = home_dir + relative_path;
     rclcpp::spin(std::make_shared<ImuDvlPublisher>(csv_file_path));
     rclcpp::shutdown();

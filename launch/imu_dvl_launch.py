@@ -8,12 +8,14 @@ def generate_launch_description():
             executable='imu_dvl_publisher',
             name='imu_dvl_publisher',
             output='screen',
+            parameters=[{'use_sim_time': True}],
         ),
         Node(
             package='rviz2',
             executable='rviz2',
             name='rviz2',
             output='screen',
-            arguments=['-d', '~/colcon_ws/src/kalman_filters/rviz/imu_dvl_config.rviz']
+            arguments=['-d', '~/colcon_ws/src/kalman_filters/rviz/imu_dvl_config.rviz'],
+            parameters=[{'use_sim_time': True}],    
         ),
     ])
