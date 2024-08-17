@@ -18,6 +18,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2 REQUIRED)
+find_package(rosgraph_msgs REQUIRED)
 
 # Include directories
 include_directories(include)
@@ -32,6 +33,7 @@ ament_target_dependencies(imu_dvl_publisher
   geometry_msgs
   tf2_ros
   tf2
+  rosgraph_msgs
 )
 
 ament_target_dependencies(data_subscriber
@@ -41,6 +43,7 @@ ament_target_dependencies(data_subscriber
   geometry_msgs
   tf2_ros
   tf2
+  rosgraph_msgs
 )
 
 install(TARGETS
